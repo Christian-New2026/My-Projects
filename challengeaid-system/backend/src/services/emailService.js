@@ -16,6 +16,13 @@ function getTransporter() {
 }
 
 async function sendPasswordApprovalEmail({ requesterName, requesterEmail, approveUrl, rejectUrl }) {
+    const missing = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS'].filter((key) => !process.env[key]);
+    if (missing.length && process.env.DEV_EMAIL_FALLBACK === 'true') {
+        console.warn('\nPassword approval email fallback (SMTP is not configured):');
+        console.warn(`Approve: ${approveUrl}`);
+        console.warn(`Reject: ${rejectUrl}\n`);
+        return;
+    }
     const transporter = getTransporter();
     const from = process.env.SMTP_FROM || process.env.SMTP_USER;
     await transporter.sendMail({
