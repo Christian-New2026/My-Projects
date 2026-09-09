@@ -7,16 +7,31 @@ const { assertBudgetAvailable } = require('../services/budgetService');
 const { getApprovalStatus } = require('../services/approvalService');
 const { computeReconciliationStatus } = require('../services/reconciliationService');
 
+const allocationLineSchema = z.object({
+  centreId: z.string().uuid().optional(),
+  clusterName: z.string().min(1).optional(),
+  description: z.string().min(1),
+  units: z.number().positive(),
+  unitCost: z.number().positive(),
+  notes: z.string().max(2000).optional()
+}).refine((line) => line.centreId || line.clusterName, {
+  message: 'Each allocation line needs a centre or cluster'
+});
+
 const createSchema = z
   .object({
     centreId: z.string().uuid(),
     budgetLineId: z.string().uuid(),
+    scopeType: z.enum(['single_center', 'single_cluster', 'multi_cluster']).default('single_center'),
+    scopeLabel: z.string().min(1).optional(),
+    selectedCentreIds: z.array(z.string().uuid()).min(1),
+    allocationLines: z.array(allocationLineSchema).min(1),
     activity: z.string().min(1),
     paymentType: z.enum(['coach_fee', 'foodstuffs', 'supplies', 'cleaning', 'other']),
     recipientName: z.string().min(1),
     recipientAccount: z.string().min(1).optional(),
     recipientPhone: z.string().min(1).optional(),
-    amount: z.number().positive(),
+    amount: z.number().positive().optional(),
     justification: z.string().min(1),
     invoiceFileUrl: z.string().min(1).optional(),
     quotationFileUrl: z.string().min(1).optional()
@@ -27,6 +42,10 @@ const createSchema = z
   .refine((v) => v.paymentType !== 'other' || v.otherPaymentType, {
     message: 'Specify the payment type when Other is selected',
     path: ['otherPaymentType']
+  })
+  .refine((v) => v.allocationLines.reduce((sum, line) => sum + line.units * line.unitCost, 0) > 0, {
+    message: 'Allocation lines must have a positive total',
+    path: ['allocationLines']
   });
 
 const reviseSchema = z
@@ -51,37 +70,56 @@ async function createRequest(req, res, next) {
     const input = createSchema.parse(req.body);
 
     await withTransaction(async (client) => {
-      await assertBudgetAvailable(client, { budgetLineId: input.budgetLineId, amount: input.amount });
+      const amount = input.allocationLines.reduce((sum, line) => sum + line.units * line.unitCost, 0);
+      await assertBudgetAvailable(client, { budgetLineId: input.budgetLineId, amount });
 
       const { rows } = await client.query(
         `INSERT INTO payment_requests
-            (requester_id, centre_id, budget_line_id, activity, payment_type, other_payment_type,
+            (requester_id, centre_id, budget_line_id, scope_type, scope_label, activity, payment_type, other_payment_type,
             recipient_name, recipient_account, recipient_phone, amount, justification,
             invoice_file_url, quotation_file_url, status, submitted_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'submitted', now())
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'submitted', now())
          RETURNING *`,
         [
           req.user.id,
           input.centreId,
           input.budgetLineId,
+          input.scopeType,
+          input.scopeLabel || null,
           input.activity,
           input.paymentType,
           input.otherPaymentType || null,
           input.recipientName,
           input.recipientAccount || null,
           input.recipientPhone || null,
-          input.amount,
+          amount,
           input.justification,
           input.invoiceFileUrl || null,
           input.quotationFileUrl || null
         ]
       );
 
+      for (const centreId of input.selectedCentreIds) {
+        await client.query(
+          'INSERT INTO payment_request_centres (request_id, centre_id) VALUES ($1, $2)',
+          [rows[0].id, centreId]
+        );
+      }
+      for (const line of input.allocationLines) {
+        await client.query(
+          `INSERT INTO payment_request_lines
+             (request_id, centre_id, cluster_name, description, units, unit_cost, total, notes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [rows[0].id, line.centreId || null, line.clusterName || null, line.description,
+            line.units, line.unitCost, line.units * line.unitCost, line.notes || null]
+        );
+      }
+
       await recordAudit(client, {
         requestId: rows[0].id,
         actorId: req.user.id,
         action: 'request.submitted',
-        details: { amount: input.amount, paymentType: input.paymentType }
+        details: { amount, paymentType: input.paymentType, scopeType: input.scopeType }
       });
 
       res.status(201).json(rows[0]);
@@ -202,13 +240,26 @@ async function getRequest(req, res, next) {
     }
 
     const approvalStatus = await getApprovalStatus(db, id);
+    const { rows: allocationLines } = await query(
+      `SELECT prl.*, c.name AS centre_name, c.location AS centre_location
+       FROM payment_request_lines prl
+       LEFT JOIN centres c ON c.id = prl.centre_id
+       WHERE prl.request_id = $1 ORDER BY prl.created_at`,
+      [id]
+    );
+    const { rows: selectedCentres } = await query(
+      `SELECT c.id, c.name, c.location
+       FROM payment_request_centres prc JOIN centres c ON c.id = prc.centre_id
+       WHERE prc.request_id = $1 ORDER BY c.location, c.name`,
+      [id]
+    );
 
     let reconciliation = null;
     if (['disbursed', 'reconciled'].includes(request.status)) {
       reconciliation = await computeReconciliationStatus(db, id, request.payment_type);
     }
 
-    res.json({ ...request, approvalStatus, reconciliation });
+    res.json({ ...request, allocationLines, selectedCentres, approvalStatus, reconciliation });
   } catch (err) {
     next(err);
   }

@@ -12,6 +12,11 @@ export function CentresPage() {
   }
   useEffect(load, []);
 
+  const groupedCentres = centres.reduce((groups, centre) => {
+    (groups[centre.location] ||= []).push(centre);
+    return groups;
+  }, {});
+
   async function handleSubmit(e) {
     e.preventDefault();
     setBusy(true);
@@ -32,13 +37,17 @@ export function CentresPage() {
       <div className="page-header"><h1>SOH Centers</h1></div>
       {error && <div className="error-banner">{error}</div>}
 
-      {centres.map((c) => (
-        <div key={c.id} className="request-row">
-          <div className="request-row-main">
-            <div className="recipient">{c.name}</div>
-            <div className="meta">{c.location}</div>
-          </div>
-        </div>
+      {Object.entries(groupedCentres).map(([location, group]) => (
+        <section key={location} style={{ marginBottom: '1.5rem' }}>
+          <h2>{location}</h2>
+          {group.map((c) => (
+            <div key={c.id} className="request-row">
+              <div className="request-row-main">
+                <div className="recipient">{c.name}</div>
+              </div>
+            </div>
+          ))}
+        </section>
       ))}
 
       <div className="card" style={{ marginTop: '1.5rem' }}>

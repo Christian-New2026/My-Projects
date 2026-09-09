@@ -41,7 +41,7 @@ export function BudgetLinesPage() {
         <div key={l.id} className="request-row">
           <div className="request-row-main">
             <div className="recipient">{l.name}</div>
-            <div className="meta">Allocated {formatAmount(l.allocated_amount)} · Spent {formatAmount(l.spent_to_date)}</div>
+            <div className="meta">{l.budget_group} · Allocated {formatAmount(l.allocated_amount)} · Spent {formatAmount(l.spent_to_date)}</div>
           </div>
           <div className="amount">{formatAmount(l.remaining)} left</div>
         </div>

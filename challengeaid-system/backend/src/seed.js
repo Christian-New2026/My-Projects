@@ -84,21 +84,33 @@ async function seed() {
       ['Training of supervisors on safeguarding', 15000]
     ];
 
+    function budgetGroup(name) {
+      if (/Salaries|Supervisors|Teachers|safeguarding|Motivation/.test(name)) return 'People & Staffing';
+      if (/Accelerated|Sanitary|Textbooks|E-learning|Educational Support|Career Roundtable|First Aid/.test(name)) return 'Education & Learner Support';
+      if (/SOH|Kabiro|Billian|Lifeskills|Dandora|Maparasha|St\. Mary|Electricity/.test(name)) return 'SOH Operations & Direct Support';
+      if (/Sports|Debate|Chess|Holiday Revision|Collaboration/.test(name)) return 'Programme Activities & Enrichment';
+      if (/Meetings|Monitoring visits|Mileage|Transport/.test(name)) return 'Travel & Meetings';
+      if (/Insurance|Office|Coordination|Stationery|Communication|Audit|Bank charges|IEC/.test(name)) return 'Administration & Overheads';
+      if (/Establishment/.test(name)) return 'Growth & Development';
+      return 'Other Programme Costs';
+    }
+
     const blRows = [];
     for (const [name, allocatedAmount] of budgetLineSeed) {
-      const { rows } = await client.query(
-        `INSERT INTO budget_lines (name, centre_id, allocated_amount) VALUES ($1, NULL, $2)
-         ON CONFLICT DO NOTHING RETURNING id, name`,
-        [name, allocatedAmount]
+      const group = budgetGroup(name);
+      const existing = await client.query(
+        'SELECT id, name FROM budget_lines WHERE name = $1 AND centre_id IS NULL ORDER BY created_at LIMIT 1',
+        [name]
       );
-      if (rows[0]) blRows.push(rows[0]);
-      else {
-        const existing = await client.query(
-          'SELECT id, name FROM budget_lines WHERE name = $1 AND centre_id IS NULL ORDER BY created_at LIMIT 1',
-          [name]
-        );
+      if (existing.rows[0]) {
         blRows.push(existing.rows[0]);
-        await client.query('UPDATE budget_lines SET allocated_amount = $1 WHERE id = $2', [allocatedAmount, existing.rows[0].id]);
+        await client.query('UPDATE budget_lines SET allocated_amount = $1, budget_group = $2 WHERE id = $3', [allocatedAmount, group, existing.rows[0].id]);
+      } else {
+        const inserted = await client.query(
+          'INSERT INTO budget_lines (name, budget_group, centre_id, allocated_amount) VALUES ($1, $2, NULL, $3) RETURNING id, name',
+          [name, group, allocatedAmount]
+        );
+        blRows.push(inserted.rows[0]);
       }
     }
 

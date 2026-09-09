@@ -102,6 +102,7 @@ ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);
 CREATE TABLE budget_lines (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name             TEXT NOT NULL,
+  budget_group     TEXT NOT NULL DEFAULT 'Other Programme Costs',
   centre_id        UUID REFERENCES centres(id) ON DELETE SET NULL,
   allocated_amount NUMERIC(14,2) NOT NULL CHECK (allocated_amount >= 0),
   spent_to_date    NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (spent_to_date >= 0),
@@ -114,6 +115,8 @@ CREATE TABLE payment_requests (
   requester_id        UUID NOT NULL REFERENCES users(id),
   centre_id           UUID NOT NULL REFERENCES centres(id),
   budget_line_id      UUID NOT NULL REFERENCES budget_lines(id),
+  scope_type          TEXT NOT NULL DEFAULT 'single_center',
+  scope_label         TEXT,
   activity            TEXT NOT NULL,
   payment_type        payment_type NOT NULL,
   other_payment_type  TEXT,
@@ -137,6 +140,27 @@ CREATE TABLE payment_requests (
 CREATE INDEX idx_payment_requests_status ON payment_requests(status);
 CREATE INDEX idx_payment_requests_centre ON payment_requests(centre_id);
 CREATE INDEX idx_payment_requests_requester ON payment_requests(requester_id);
+
+CREATE TABLE payment_request_centres (
+  request_id UUID NOT NULL REFERENCES payment_requests(id) ON DELETE CASCADE,
+  centre_id  UUID NOT NULL REFERENCES centres(id),
+  PRIMARY KEY (request_id, centre_id)
+);
+
+CREATE TABLE payment_request_lines (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_id   UUID NOT NULL REFERENCES payment_requests(id) ON DELETE CASCADE,
+  centre_id    UUID REFERENCES centres(id),
+  cluster_name TEXT,
+  description  TEXT NOT NULL,
+  units        NUMERIC(12,2) NOT NULL CHECK (units > 0),
+  unit_cost    NUMERIC(14,2) NOT NULL CHECK (unit_cost > 0),
+  total        NUMERIC(14,2) NOT NULL CHECK (total > 0),
+  notes        TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_payment_request_lines_request ON payment_request_lines(request_id);
 
 -- One row per individual approval action (Finance, Director, and each
 -- of the four Trustees individually), per Section 9.1.

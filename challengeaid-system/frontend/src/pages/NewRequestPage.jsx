@@ -5,8 +5,10 @@ import { PAYMENT_TYPE_LABEL } from '../components/StatusBadge';
 
 export function NewRequestPage() {
   const navigate = useNavigate();
+  const [centres, setCentres] = useState([]);
   const [budgetLines, setBudgetLines] = useState([]);
   const [form, setForm] = useState({
+    centreId: '',
     budgetLineId: '',
     activity: '',
     paymentType: 'coach_fee',
@@ -23,7 +25,9 @@ export function NewRequestPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api.listBudgetLines().then(setBudgetLines).catch((err) => setError(err.message));
+    Promise.all([api.listCentres(), api.listBudgetLines()])
+      .then(([centreRows, budgetRows]) => { setCentres(centreRows); setBudgetLines(budgetRows); })
+      .catch((err) => setError(err.message));
   }, []);
 
   function update(field, value) {
@@ -49,7 +53,7 @@ export function NewRequestPage() {
     setBusy(true);
     try {
       const created = await api.createRequest({
-        centreId: selectedBudgetLine.centre_id,
+        centreId: form.centreId,
         budgetLineId: form.budgetLineId,
         activity: form.activity,
         paymentType: form.paymentType,
@@ -71,6 +75,10 @@ export function NewRequestPage() {
   }
 
   const selectedBudgetLine = budgetLines.find((b) => b.id === form.budgetLineId);
+  const budgetGroups = budgetLines.reduce((groups, line) => {
+    (groups[line.budget_group] ||= []).push(line);
+    return groups;
+  }, {});
 
   return (
     <div style={{ maxWidth: 560 }}>
@@ -80,6 +88,21 @@ export function NewRequestPage() {
 
       <form className="card" onSubmit={handleSubmit}>
         {error && <div className="error-banner">{error}</div>}
+
+        <div className="field">
+          <label htmlFor="centre">SOH Center</label>
+          <select id="centre" value={form.centreId} onChange={(e) => update('centreId', e.target.value)} required>
+            <option value="" disabled>Select an SOH center…</option>
+            {Object.entries(centres.reduce((groups, centre) => {
+              (groups[centre.location] ||= []).push(centre);
+              return groups;
+            }, {})).map(([location, group]) => (
+              <optgroup key={location} label={location}>
+                {group.map((centre) => <option key={centre.id} value={centre.id}>{centre.name}</option>)}
+              </optgroup>
+            ))}
+          </select>
+        </div>
 
         <div className="field">
           <label htmlFor="activity">Activity</label>
@@ -96,8 +119,10 @@ export function NewRequestPage() {
             disabled={!budgetLines.length}
           >
             <option value="" disabled>Select a budget line…</option>
-            {budgetLines.map((b) => (
-              <option key={b.id} value={b.id}>{b.name} — {b.remaining} remaining</option>
+            {Object.entries(budgetGroups).map(([group, lines]) => (
+              <optgroup key={group} label={group}>
+                {lines.map((b) => <option key={b.id} value={b.id}>{b.name} — {b.remaining} remaining</option>)}
+              </optgroup>
             ))}
           </select>
           {selectedBudgetLine && (
