@@ -5,7 +5,8 @@ const pool = new Pool({
   port: process.env.PGPORT ? Number(process.env.PGPORT) : 5432,
   database: process.env.PGDATABASE,
   user: process.env.PGUSER,
-  password: process.env.PGPASSWORD
+  password: process.env.PGPASSWORD,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 pool.on('error', (err) => {
