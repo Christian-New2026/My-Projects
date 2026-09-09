@@ -119,7 +119,8 @@ async function recordApprovalDecision({ requestId, approver, decision, comments 
 
     await client.query(
       `UPDATE payment_requests
-       SET status = $1, rejection_reason = CASE WHEN $1 = 'rejected' THEN $2 ELSE rejection_reason END
+         SET status = $1::request_status,
+           rejection_reason = CASE WHEN $1::request_status = 'rejected' THEN $2 ELSE rejection_reason END
        WHERE id = $3`,
       [newStatus, decision === 'rejected' ? comments || null : null, requestId]
     );

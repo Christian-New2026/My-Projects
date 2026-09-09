@@ -12,7 +12,8 @@ const STATUS_FILTERS = [
   { value: 'trustee_approved', label: 'Fully Approved' },
   { value: 'disbursed', label: 'Disbursed' },
   { value: 'reconciled', label: 'Reconciled' },
-  { value: 'rejected', label: 'Rejected' }
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'more_info_requested', label: 'More Info Requested' }
 ];
 
 export function RequestsListPage() {

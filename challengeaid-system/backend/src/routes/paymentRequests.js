@@ -1,6 +1,6 @@
 const express = require('express');
 const { requireAuth, requireRole } = require('../middleware/auth');
-const { createRequest, listRequests, getRequest } = require('../controllers/paymentRequestsController');
+const { createRequest, reviseAndResubmit, listRequests, getRequest } = require('../controllers/paymentRequestsController');
 const { decide } = require('../controllers/approvalsController');
 const { executePayment } = require('../controllers/executionsController');
 const { uploadDocument } = require('../controllers/reconciliationController');
@@ -9,6 +9,7 @@ const router = express.Router();
 router.use(requireAuth);
 
 router.post('/', requireRole('staff', 'admin'), createRequest);
+router.post('/:id/resubmit', requireRole('staff'), reviseAndResubmit);
 router.get('/', listRequests);
 router.get('/:id', getRequest);
 

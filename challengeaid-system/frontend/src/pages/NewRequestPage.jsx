@@ -5,35 +5,36 @@ import { PAYMENT_TYPE_LABEL } from '../components/StatusBadge';
 
 export function NewRequestPage() {
   const navigate = useNavigate();
-  const [centres, setCentres] = useState([]);
   const [budgetLines, setBudgetLines] = useState([]);
   const [form, setForm] = useState({
-    centreId: '',
     budgetLineId: '',
+    activity: '',
     paymentType: 'coach_fee',
+    otherPaymentType: '',
     recipientName: '',
     recipientAccount: '',
     recipientPhone: '',
     amount: '',
-    justification: ''
+    justification: '',
+    invoiceFileUrl: '',
+    quotationFileUrl: ''
   });
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api.listCentres().then(setCentres).catch((err) => setError(err.message));
+    api.listBudgetLines().then(setBudgetLines).catch((err) => setError(err.message));
   }, []);
-
-  useEffect(() => {
-    if (!form.centreId) {
-      setBudgetLines([]);
-      return;
-    }
-    api.listBudgetLines(form.centreId).then(setBudgetLines).catch((err) => setError(err.message));
-  }, [form.centreId]);
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
+  }
+
+  function readFile(file, field) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => update(field, reader.result);
+    reader.readAsDataURL(file);
   }
 
   async function handleSubmit(e) {
@@ -48,14 +49,18 @@ export function NewRequestPage() {
     setBusy(true);
     try {
       const created = await api.createRequest({
-        centreId: form.centreId,
+        centreId: selectedBudgetLine.centre_id,
         budgetLineId: form.budgetLineId,
+        activity: form.activity,
         paymentType: form.paymentType,
+        otherPaymentType: form.otherPaymentType || undefined,
         recipientName: form.recipientName,
         recipientAccount: form.recipientAccount || undefined,
         recipientPhone: form.recipientPhone || undefined,
         amount: Number(form.amount),
-        justification: form.justification
+        justification: form.justification,
+        invoiceFileUrl: form.invoiceFileUrl || undefined,
+        quotationFileUrl: form.quotationFileUrl || undefined
       });
       navigate(`/requests/${created.id}`);
     } catch (err) {
@@ -77,13 +82,8 @@ export function NewRequestPage() {
         {error && <div className="error-banner">{error}</div>}
 
         <div className="field">
-          <label htmlFor="centre">Centre</label>
-          <select id="centre" value={form.centreId} onChange={(e) => update('centreId', e.target.value)} required>
-            <option value="" disabled>Select a centre…</option>
-            {centres.map((c) => (
-              <option key={c.id} value={c.id}>{c.name} ({c.location})</option>
-            ))}
-          </select>
+          <label htmlFor="activity">Activity</label>
+          <input id="activity" value={form.activity} onChange={(e) => update('activity', e.target.value)} required placeholder="e.g. Youth coaching session" />
         </div>
 
         <div className="field">
@@ -93,7 +93,7 @@ export function NewRequestPage() {
             value={form.budgetLineId}
             onChange={(e) => update('budgetLineId', e.target.value)}
             required
-            disabled={!form.centreId}
+            disabled={!budgetLines.length}
           >
             <option value="" disabled>Select a budget line…</option>
             {budgetLines.map((b) => (
@@ -115,6 +115,22 @@ export function NewRequestPage() {
             ))}
           </select>
         </div>
+
+        {form.paymentType === 'other' && (
+          <div className="field">
+            <label htmlFor="otherPaymentType">Specify payment type</label>
+            <input
+              id="otherPaymentType"
+              value={form.otherPaymentType}
+              onChange={(e) => update('otherPaymentType', e.target.value)}
+              placeholder="e.g. Transport or venue hire"
+              required
+            />
+            <p style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', marginTop: '0.35rem' }}>
+              Please describe the payment clearly.
+            </p>
+          </div>
+        )}
 
         <div className="field">
           <label htmlFor="recipientName">Recipient name</label>
@@ -167,6 +183,16 @@ export function NewRequestPage() {
             onChange={(e) => update('justification', e.target.value)}
             required
           />
+        </div>
+
+        <div className="field">
+          <label htmlFor="invoice">Invoice (optional)</label>
+          <input id="invoice" type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => readFile(e.target.files[0], 'invoiceFileUrl')} />
+        </div>
+
+        <div className="field">
+          <label htmlFor="quotation">Quotation (optional)</label>
+          <input id="quotation" type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => readFile(e.target.files[0], 'quotationFileUrl')} />
         </div>
 
         <button type="submit" className="primary" disabled={busy}>

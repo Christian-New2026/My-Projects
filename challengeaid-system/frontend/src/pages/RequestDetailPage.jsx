@@ -24,6 +24,16 @@ export function RequestDetailPage() {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [comments, setComments] = useState('');
+  const [revision, setRevision] = useState({
+    activity: '',
+    recipientName: '',
+    recipientAccount: '',
+    recipientPhone: '',
+    amount: '',
+    justification: '',
+    invoiceFileUrl: '',
+    quotationFileUrl: ''
+  });
 
   const load = useCallback(() => {
     setError(null);
@@ -32,9 +42,25 @@ export function RequestDetailPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (!request) return;
+    setRevision({
+      activity: request.activity || '',
+      recipientName: request.recipient_name || '',
+      recipientAccount: request.recipient_account || '',
+      recipientPhone: request.recipient_phone || '',
+      amount: request.amount || '',
+      justification: request.justification || '',
+      invoiceFileUrl: request.invoice_file_url || '',
+      quotationFileUrl: request.quotation_file_url || ''
+    });
+  }, [request]);
+
   async function handleDecision(decision) {
-    if (decision === 'rejected' && !comments.trim()) {
-      setError('A rejection needs a reason in the comments field.');
+    if (['rejected', 'more_info_requested'].includes(decision) && !comments.trim()) {
+      setError(decision === 'rejected'
+        ? 'A rejection needs a reason in the comments field.'
+        : 'Explain what must be corrected in the comments field.');
       return;
     }
     setBusy(true);
@@ -42,6 +68,44 @@ export function RequestDetailPage() {
     try {
       await api.decide(id, { decision, comments: comments.trim() || undefined });
       setComments('');
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function updateRevision(field, value) {
+    setRevision((current) => ({ ...current, [field]: value }));
+  }
+
+  function readRevisionFile(file, field) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => updateRevision(field, reader.result);
+    reader.readAsDataURL(file);
+  }
+
+  async function handleResubmit(e) {
+    e.preventDefault();
+    if (!revision.recipientAccount && !revision.recipientPhone) {
+      setError('Provide a bank account or a mobile money number for the recipient.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await api.reviseAndResubmit(id, {
+        activity: revision.activity,
+        recipientName: revision.recipientName,
+        recipientAccount: revision.recipientAccount || undefined,
+        recipientPhone: revision.recipientPhone || undefined,
+        amount: Number(revision.amount),
+        justification: revision.justification,
+        invoiceFileUrl: revision.invoiceFileUrl || undefined,
+        quotationFileUrl: revision.quotationFileUrl || undefined
+      });
       await load();
     } catch (err) {
       setError(err.message);
@@ -91,6 +155,7 @@ export function RequestDetailPage() {
   if (error && !request) return <div className="error-banner">{error}</div>;
 
   const canDecide = APPROVER_ROLES.includes(user.role) && isMyTurn(request, user);
+  const canRevise = user.role === 'staff' && request.requester_id === user.id && ['rejected', 'more_info_requested'].includes(request.status);
   const canExecute = (user.role === 'finance' || user.role === 'admin') && request.status === 'trustee_approved';
   const canUpload = ['staff', 'finance', 'admin'].includes(user.role) && ['disbursed', 'reconciled'].includes(request.status);
 
@@ -100,7 +165,7 @@ export function RequestDetailPage() {
         <div>
           <h1>{request.recipient_name}</h1>
           <p className="eyebrow" style={{ marginTop: '0.25rem' }}>
-            {PAYMENT_TYPE_LABEL[request.payment_type]} · Submitted {formatDate(request.submitted_at)}
+            {request.payment_type === 'other' ? request.other_payment_type : PAYMENT_TYPE_LABEL[request.payment_type]} · Submitted {formatDate(request.submitted_at)}
           </p>
         </div>
         <StatusBadge status={request.status} />
@@ -108,12 +173,29 @@ export function RequestDetailPage() {
 
       {error && <div className="error-banner">{error}</div>}
 
+      {request.approvalStatus?.all?.filter((decision) => ['rejected', 'more_info_requested'].includes(decision.decision)).map((decision) => (
+        <div key={decision.id} className="error-banner">
+          <strong>{decision.decision === 'rejected' ? 'Rejected' : 'More information requested'} by {decision.approver_name}:</strong>{' '}
+          {decision.comments}
+        </div>
+      ))}
+
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <span className="amount">{formatAmount(request.amount)}</span>
         </div>
         <hr className="hairline" />
         <p><strong>Justification:</strong> {request.justification}</p>
+        <p><strong>Activity:</strong> {request.activity}</p>
+        {request.payment_type === 'other' && <p><strong>Specified payment type:</strong> {request.other_payment_type}</p>}
+        {(request.invoice_file_url || request.quotation_file_url) && (
+          <p>
+            <strong>Supporting documents:</strong>{' '}
+            {request.invoice_file_url && <a href={request.invoice_file_url} download="invoice">Invoice</a>}
+            {request.invoice_file_url && request.quotation_file_url && ' · '}
+            {request.quotation_file_url && <a href={request.quotation_file_url} download="quotation">Quotation</a>}
+          </p>
+        )}
         <p style={{ marginBottom: 0 }}>
           <strong>Recipient:</strong> {request.recipient_name}
           {request.recipient_account && <> · Account <span className="mono">{request.recipient_account}</span></>}
@@ -133,7 +215,7 @@ export function RequestDetailPage() {
         <div className="card">
           <h3>Your decision</h3>
           <div className="field" style={{ marginTop: '0.75rem' }}>
-            <label htmlFor="comments">Comments (required for rejection)</label>
+            <label htmlFor="comments">Reason or required corrections (required for rejection and information requests)</label>
             <textarea id="comments" rows={2} value={comments} onChange={(e) => setComments(e.target.value)} />
           </div>
           <div style={{ display: 'flex', gap: '0.6rem' }}>
@@ -141,6 +223,52 @@ export function RequestDetailPage() {
             <button className="stamp-amber" disabled={busy} onClick={() => handleDecision('more_info_requested')}>Request Info</button>
             <button className="stamp-brick" disabled={busy} onClick={() => handleDecision('rejected')}>Reject</button>
           </div>
+        </div>
+      )}
+
+      {canRevise && (
+        <div className="card">
+          <h3>Correct and resubmit</h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--ink-soft)' }}>
+            Update the request using the feedback above. It will return to Finance for a fresh review.
+          </p>
+          <form onSubmit={handleResubmit}>
+            <div className="field">
+              <label htmlFor="revisionActivity">Activity</label>
+              <input id="revisionActivity" value={revision.activity} onChange={(e) => updateRevision('activity', e.target.value)} required />
+            </div>
+            <div className="field">
+              <label htmlFor="revisionRecipientName">Recipient name</label>
+              <input id="revisionRecipientName" value={revision.recipientName} onChange={(e) => updateRevision('recipientName', e.target.value)} required />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="field">
+                <label htmlFor="revisionAccount">Bank account</label>
+                <input id="revisionAccount" value={revision.recipientAccount} onChange={(e) => updateRevision('recipientAccount', e.target.value)} />
+              </div>
+              <div className="field">
+                <label htmlFor="revisionPhone">Mobile number</label>
+                <input id="revisionPhone" value={revision.recipientPhone} onChange={(e) => updateRevision('recipientPhone', e.target.value)} />
+              </div>
+            </div>
+            <div className="field">
+              <label htmlFor="revisionAmount">Amount (KES)</label>
+              <input id="revisionAmount" type="number" min="1" step="1" value={revision.amount} onChange={(e) => updateRevision('amount', e.target.value)} required />
+            </div>
+            <div className="field">
+              <label htmlFor="revisionJustification">Justification</label>
+              <textarea id="revisionJustification" rows={3} value={revision.justification} onChange={(e) => updateRevision('justification', e.target.value)} required />
+            </div>
+            <div className="field">
+              <label htmlFor="revisionInvoice">Replace invoice (optional)</label>
+              <input id="revisionInvoice" type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => readRevisionFile(e.target.files[0], 'invoiceFileUrl')} />
+            </div>
+            <div className="field">
+              <label htmlFor="revisionQuotation">Replace quotation (optional)</label>
+              <input id="revisionQuotation" type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => readRevisionFile(e.target.files[0], 'quotationFileUrl')} />
+            </div>
+            <button type="submit" className="primary" disabled={busy}>Resubmit for review</button>
+          </form>
         </div>
       )}
 

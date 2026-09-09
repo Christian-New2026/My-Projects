@@ -12,8 +12,13 @@ async function decide(req, res, next) {
     const { id } = req.params; // request id
     const input = decisionSchema.parse(req.body);
 
-    if (input.decision === 'rejected' && !input.comments) {
-      throw new AppError('A rejection requires comments explaining why', 400);
+    if (['rejected', 'more_info_requested'].includes(input.decision) && !input.comments?.trim()) {
+      throw new AppError(
+        input.decision === 'rejected'
+          ? 'A rejection requires comments explaining why'
+          : 'Requesting more information requires comments explaining what must be corrected',
+        400
+      );
     }
 
     const result = await recordApprovalDecision({

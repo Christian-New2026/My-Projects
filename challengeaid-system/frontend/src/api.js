@@ -41,7 +41,7 @@ export const api = {
   listCentres: () => request('/centres'),
   createCentre: (payload) => request('/centres', { method: 'POST', body: payload }),
 
-  listBudgetLines: (centreId) => request(`/budget-lines${centreId ? `?centreId=${centreId}` : ''}`),
+  listBudgetLines: () => request('/budget-lines'),
   createBudgetLine: (payload) => request('/budget-lines', { method: 'POST', body: payload }),
 
   listUsers: () => request('/users'),
@@ -54,6 +54,7 @@ export const api = {
   },
   getRequest: (id) => request(`/payment-requests/${id}`),
   createRequest: (payload) => request('/payment-requests', { method: 'POST', body: payload }),
+  reviseAndResubmit: (id, payload) => request(`/payment-requests/${id}/resubmit`, { method: 'POST', body: payload }),
   decide: (id, payload) => request(`/payment-requests/${id}/decision`, { method: 'POST', body: payload }),
   execute: (id, payload) => request(`/payment-requests/${id}/execute`, { method: 'POST', body: payload }),
   uploadDocument: (id, payload) => request(`/payment-requests/${id}/documents`, { method: 'POST', body: payload }),

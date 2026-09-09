@@ -114,12 +114,16 @@ CREATE TABLE payment_requests (
   requester_id        UUID NOT NULL REFERENCES users(id),
   centre_id           UUID NOT NULL REFERENCES centres(id),
   budget_line_id      UUID NOT NULL REFERENCES budget_lines(id),
+  activity            TEXT NOT NULL,
   payment_type        payment_type NOT NULL,
+  other_payment_type  TEXT,
   recipient_name      TEXT NOT NULL,
   recipient_account   TEXT,      -- bank account number, if applicable
   recipient_phone     TEXT,      -- for M-Co-op Cash, if applicable
   amount              NUMERIC(14,2) NOT NULL CHECK (amount > 0),
   justification        TEXT NOT NULL,
+  invoice_file_url    TEXT,
+  quotation_file_url  TEXT,
   status              request_status NOT NULL DEFAULT 'draft',
   rejection_reason    TEXT,
   submitted_at        TIMESTAMPTZ,
