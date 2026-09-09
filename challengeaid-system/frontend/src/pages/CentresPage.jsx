@@ -29,7 +29,7 @@ export function CentresPage() {
 
   return (
     <div style={{ maxWidth: 640 }}>
-      <div className="page-header"><h1>Centres</h1></div>
+      <div className="page-header"><h1>SOH Centers</h1></div>
       {error && <div className="error-banner">{error}</div>}
 
       {centres.map((c) => (
@@ -42,7 +42,7 @@ export function CentresPage() {
       ))}
 
       <div className="card" style={{ marginTop: '1.5rem' }}>
-        <h3>Add a centre</h3>
+        <h3>Add an SOH center</h3>
         <form onSubmit={handleSubmit}>
           <div className="field">
             <label htmlFor="name">Name</label>

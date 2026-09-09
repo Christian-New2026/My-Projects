@@ -4,7 +4,7 @@ const { AppError } = require('../middleware/errorHandler');
 
 const createSchema = z.object({
   name: z.string().min(1),
-  centreId: z.string().uuid(),
+  centreId: z.string().uuid().nullable().optional(),
   allocatedAmount: z.number().positive()
 });
 
@@ -30,7 +30,7 @@ async function createBudgetLine(req, res, next) {
     const input = createSchema.parse(req.body);
     const { rows } = await query(
       'INSERT INTO budget_lines (name, centre_id, allocated_amount) VALUES ($1, $2, $3) RETURNING *',
-      [input.name, input.centreId, input.allocatedAmount]
+      [input.name, input.centreId || null, input.allocatedAmount]
     );
     res.status(201).json(rows[0]);
   } catch (err) {

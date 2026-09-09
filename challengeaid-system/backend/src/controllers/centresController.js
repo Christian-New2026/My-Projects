@@ -9,7 +9,7 @@ const createCentreSchema = z.object({
 
 async function listCentres(req, res, next) {
   try {
-    const { rows } = await query('SELECT * FROM centres ORDER BY name');
+    const { rows } = await query('SELECT * FROM centres ORDER BY location, name');
     res.json(rows);
   } catch (err) {
     next(err);
