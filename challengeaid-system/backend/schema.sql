@@ -118,7 +118,10 @@ CREATE INDEX IF NOT EXISTS idx_password_change_requests_user ON password_change_
 -- Unique email constraint — guarded so re-adding it doesn't error.
 DO $$ BEGIN
   ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+  WHEN duplicate_table THEN NULL;
+END $$;
 
 -- Exactly four active trustees is a business rule enforced at the
 -- application layer (see services/userService), not the DB — Postgres
