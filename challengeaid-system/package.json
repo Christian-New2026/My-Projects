@@ -1,0 +1,18 @@
+{
+  "name": "challengeaid-disbursement-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ChallengeAid Africa Disbursement & Reconciliation System — backend API + frontend, run together.",
+  "scripts": {
+    "install:all": "npm install --prefix backend && npm install --prefix frontend",
+    "migrate": "npm run migrate --prefix backend",
+    "seed": "npm run seed --prefix backend",
+    "test": "npm test --prefix backend",
+    "dev:backend": "npm start --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
