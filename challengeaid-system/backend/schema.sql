@@ -2,6 +2,7 @@
 -- Schema v1 (Phase 1 MVP), matches Section 9 of the design doc.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS citext;
 
 -- ============================================================
 -- Enumerations
