@@ -8,6 +8,7 @@ CREATE EXTENSION IF NOT EXISTS citext;
 -- Enumerations
 -- ============================================================
 
+DO $$ BEGIN
 CREATE TYPE user_role AS ENUM (
   'staff',
   'finance',
@@ -15,7 +16,9 @@ CREATE TYPE user_role AS ENUM (
   'trustee',
   'admin'
 );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+DO $$ BEGIN
 CREATE TYPE payment_type AS ENUM (
   'coach_fee',
   'foodstuffs',
@@ -23,7 +26,9 @@ CREATE TYPE payment_type AS ENUM (
   'cleaning',
   'other'
 );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+DO $$ BEGIN
 CREATE TYPE request_status AS ENUM (
   'draft',
   'submitted',
@@ -35,24 +40,32 @@ CREATE TYPE request_status AS ENUM (
   'disbursed',
   'reconciled'
 );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+DO $$ BEGIN
 CREATE TYPE approval_stage AS ENUM (
   'finance',
   'director',
   'trustee'
 );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+DO $$ BEGIN
 CREATE TYPE approval_decision AS ENUM (
   'approved',
   'rejected',
   'more_info_requested'
 );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+DO $$ BEGIN
 CREATE TYPE payment_method AS ENUM (
   'cooperative_bank_transfer',
   'mco_op_cash'
 );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+DO $$ BEGIN
 CREATE TYPE document_type AS ENUM (
   'signed_payment_form',
   'coach_acknowledgement',
@@ -62,12 +75,13 @@ CREATE TYPE document_type AS ENUM (
   'service_confirmation',
   'other_evidence'
 );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ============================================================
 -- Core entities
 -- ============================================================
 
-CREATE TABLE centres (
+CREATE TABLE IF NOT EXISTS centres (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name          TEXT NOT NULL,
   location      TEXT NOT NULL, -- e.g. 'Kenya', 'Tanzania'
@@ -75,7 +89,7 @@ CREATE TABLE centres (
   UNIQUE (name, location)
 );
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name           TEXT NOT NULL,
   email          CITEXT,
@@ -88,7 +102,7 @@ CREATE TABLE users (
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE password_change_requests (
+CREATE TABLE IF NOT EXISTS password_change_requests (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   new_password_hash   TEXT NOT NULL,
@@ -99,12 +113,12 @@ CREATE TABLE password_change_requests (
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_password_change_requests_user ON password_change_requests(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_password_change_requests_user ON password_change_requests(user_id, status);
 
--- CITEXT (case-insensitive email) requires the citext extension.
-CREATE EXTENSION IF NOT EXISTS citext;
-ALTER TABLE users ALTER COLUMN email TYPE CITEXT;
-ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);
+-- Unique email constraint — guarded so re-adding it doesn't error.
+DO $$ BEGIN
+  ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Exactly four active trustees is a business rule enforced at the
 -- application layer (see services/userService), not the DB — Postgres
@@ -112,7 +126,7 @@ ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);
 -- blocks creating a 5th active trustee and blocks deactivating one
 -- below four without an explicit override flag.
 
-CREATE TABLE budget_lines (
+CREATE TABLE IF NOT EXISTS budget_lines (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name             TEXT NOT NULL,
   budget_group     TEXT NOT NULL DEFAULT 'Other Programme Costs',
@@ -123,7 +137,7 @@ CREATE TABLE budget_lines (
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE payment_requests (
+CREATE TABLE IF NOT EXISTS payment_requests (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   requester_id        UUID NOT NULL REFERENCES users(id),
   centre_id           UUID NOT NULL REFERENCES centres(id),
@@ -150,17 +164,17 @@ CREATE TABLE payment_requests (
   )
 );
 
-CREATE INDEX idx_payment_requests_status ON payment_requests(status);
-CREATE INDEX idx_payment_requests_centre ON payment_requests(centre_id);
-CREATE INDEX idx_payment_requests_requester ON payment_requests(requester_id);
+CREATE INDEX IF NOT EXISTS idx_payment_requests_status ON payment_requests(status);
+CREATE INDEX IF NOT EXISTS idx_payment_requests_centre ON payment_requests(centre_id);
+CREATE INDEX IF NOT EXISTS idx_payment_requests_requester ON payment_requests(requester_id);
 
-CREATE TABLE payment_request_centres (
+CREATE TABLE IF NOT EXISTS payment_request_centres (
   request_id UUID NOT NULL REFERENCES payment_requests(id) ON DELETE CASCADE,
   centre_id  UUID NOT NULL REFERENCES centres(id),
   PRIMARY KEY (request_id, centre_id)
 );
 
-CREATE TABLE payment_request_lines (
+CREATE TABLE IF NOT EXISTS payment_request_lines (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_id   UUID NOT NULL REFERENCES payment_requests(id) ON DELETE CASCADE,
   line_type    TEXT NOT NULL DEFAULT 'centre',
@@ -174,9 +188,9 @@ CREATE TABLE payment_request_lines (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_payment_request_lines_request ON payment_request_lines(request_id);
+CREATE INDEX IF NOT EXISTS idx_payment_request_lines_request ON payment_request_lines(request_id);
 
-CREATE TABLE payment_request_distributions (
+CREATE TABLE IF NOT EXISTS payment_request_distributions (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_id     UUID NOT NULL REFERENCES payment_requests(id) ON DELETE CASCADE,
   supervisor_name TEXT NOT NULL,
@@ -186,11 +200,11 @@ CREATE TABLE payment_request_distributions (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_payment_request_distributions_request ON payment_request_distributions(request_id);
+CREATE INDEX IF NOT EXISTS idx_payment_request_distributions_request ON payment_request_distributions(request_id);
 
 -- One row per individual approval action (Finance, Director, and each
 -- of the four Trustees individually), per Section 9.1.
-CREATE TABLE approvals (
+CREATE TABLE IF NOT EXISTS approvals (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_id    UUID NOT NULL REFERENCES payment_requests(id) ON DELETE CASCADE,
   approver_id   UUID NOT NULL REFERENCES users(id),
@@ -205,9 +219,9 @@ CREATE TABLE approvals (
   UNIQUE (request_id, approver_id, stage)
 );
 
-CREATE INDEX idx_approvals_request ON approvals(request_id);
+CREATE INDEX IF NOT EXISTS idx_approvals_request ON approvals(request_id);
 
-CREATE TABLE payment_executions (
+CREATE TABLE IF NOT EXISTS payment_executions (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_id        UUID NOT NULL UNIQUE REFERENCES payment_requests(id) ON DELETE CASCADE,
   executed_by       UUID NOT NULL REFERENCES users(id),
@@ -218,7 +232,7 @@ CREATE TABLE payment_executions (
   UNIQUE (transaction_reference)
 );
 
-CREATE TABLE reconciliation_docs (
+CREATE TABLE IF NOT EXISTS reconciliation_docs (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_id    UUID NOT NULL REFERENCES payment_requests(id) ON DELETE CASCADE,
   document_type document_type NOT NULL,
@@ -228,11 +242,11 @@ CREATE TABLE reconciliation_docs (
   UNIQUE (request_id, document_type)
 );
 
-CREATE INDEX idx_reconciliation_docs_request ON reconciliation_docs(request_id);
+CREATE INDEX IF NOT EXISTS idx_reconciliation_docs_request ON reconciliation_docs(request_id);
 
 -- Full audit log — every approval/rejection/execution/reconciliation
 -- change is written here in addition to its own table, per Section 10.
-CREATE TABLE audit_log (
+CREATE TABLE IF NOT EXISTS audit_log (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_id    UUID REFERENCES payment_requests(id) ON DELETE SET NULL,
   actor_id      UUID REFERENCES users(id),
@@ -241,8 +255,8 @@ CREATE TABLE audit_log (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_audit_log_request ON audit_log(request_id);
-CREATE INDEX idx_audit_log_created_at ON audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_request ON audit_log(request_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at);
 
 -- ============================================================
 -- updated_at trigger helper
@@ -256,9 +270,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_users_updated_at ON users;
 CREATE TRIGGER trg_users_updated_at BEFORE UPDATE ON users
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+DROP TRIGGER IF EXISTS trg_budget_lines_updated_at ON budget_lines;
 CREATE TRIGGER trg_budget_lines_updated_at BEFORE UPDATE ON budget_lines
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+DROP TRIGGER IF EXISTS trg_payment_requests_updated_at ON payment_requests;
 CREATE TRIGGER trg_payment_requests_updated_at BEFORE UPDATE ON payment_requests
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
