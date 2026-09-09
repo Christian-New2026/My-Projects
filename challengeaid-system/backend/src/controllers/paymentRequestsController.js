@@ -8,14 +8,22 @@ const { getApprovalStatus } = require('../services/approvalService');
 const { computeReconciliationStatus } = require('../services/reconciliationService');
 
 const allocationLineSchema = z.object({
+  lineType: z.enum(['centre', 'cluster', 'shared']).default('centre'),
   centreId: z.string().uuid().optional(),
   clusterName: z.string().min(1).optional(),
   description: z.string().min(1),
   units: z.number().positive(),
   unitCost: z.number().positive(),
   notes: z.string().max(2000).optional()
-}).refine((line) => line.centreId || line.clusterName, {
-  message: 'Each allocation line needs a centre or cluster'
+}).refine((line) => line.lineType === 'cluster' ? line.clusterName : line.lineType === 'shared' || line.centreId, {
+  message: 'Each allocation line needs a centre, cluster, or shared grouping'
+});
+
+const distributionSchema = z.object({
+  supervisorName: z.string().min(1),
+  centreId: z.string().uuid().optional(),
+  amount: z.number().positive(),
+  notes: z.string().max(2000).optional()
 });
 
 const createSchema = z
@@ -26,8 +34,10 @@ const createSchema = z
     scopeLabel: z.string().min(1).optional(),
     selectedCentreIds: z.array(z.string().uuid()).min(1),
     allocationLines: z.array(allocationLineSchema).min(1),
+    distributions: z.array(distributionSchema).optional(),
     activity: z.string().min(1),
     paymentType: z.enum(['coach_fee', 'foodstuffs', 'supplies', 'cleaning', 'other']),
+    otherPaymentType: z.string().min(1).optional(),
     recipientName: z.string().min(1),
     recipientAccount: z.string().min(1).optional(),
     recipientPhone: z.string().min(1).optional(),
@@ -108,10 +118,17 @@ async function createRequest(req, res, next) {
       for (const line of input.allocationLines) {
         await client.query(
           `INSERT INTO payment_request_lines
-             (request_id, centre_id, cluster_name, description, units, unit_cost, total, notes)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [rows[0].id, line.centreId || null, line.clusterName || null, line.description,
-            line.units, line.unitCost, line.units * line.unitCost, line.notes || null]
+             (request_id, line_type, centre_id, cluster_name, description, units, unit_cost, total, notes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [rows[0].id, line.lineType, line.centreId || null, line.clusterName || null, line.description,
+          line.units, line.unitCost, line.units * line.unitCost, line.notes || null]
+        );
+      }
+      for (const distribution of input.distributions || []) {
+        await client.query(
+          `INSERT INTO payment_request_distributions (request_id, supervisor_name, centre_id, amount, notes)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [rows[0].id, distribution.supervisorName, distribution.centreId || null, distribution.amount, distribution.notes || null]
         );
       }
 
@@ -253,13 +270,19 @@ async function getRequest(req, res, next) {
        WHERE prc.request_id = $1 ORDER BY c.location, c.name`,
       [id]
     );
+    const { rows: distributions } = await query(
+      `SELECT d.*, c.name AS centre_name, c.location AS centre_location
+       FROM payment_request_distributions d LEFT JOIN centres c ON c.id = d.centre_id
+       WHERE d.request_id = $1 ORDER BY d.created_at`,
+      [id]
+    );
 
     let reconciliation = null;
     if (['disbursed', 'reconciled'].includes(request.status)) {
       reconciliation = await computeReconciliationStatus(db, id, request.payment_type);
     }
 
-    res.json({ ...request, allocationLines, selectedCentres, approvalStatus, reconciliation });
+    res.json({ ...request, allocationLines, selectedCentres, distributions, approvalStatus, reconciliation });
   } catch (err) {
     next(err);
   }

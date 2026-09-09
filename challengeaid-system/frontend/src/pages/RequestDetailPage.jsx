@@ -187,6 +187,29 @@ export function RequestDetailPage() {
         <hr className="hairline" />
         <p><strong>Justification:</strong> {request.justification}</p>
         <p><strong>Activity:</strong> {request.activity}</p>
+        <p><strong>Requisition scope:</strong> {request.scope_label || request.scope_type?.replace('_', ' ')}</p>
+        {request.selectedCentres?.length > 0 && (
+          <p><strong>SOH Centers covered:</strong> {request.selectedCentres.map((centre) => `${centre.name} (${centre.location})`).join(', ')}</p>
+        )}
+        {request.allocationLines?.length > 0 && (
+          <div>
+            <strong>Allocation lines:</strong>
+            <div style={{ overflowX: 'auto', marginTop: '0.5rem' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead><tr><th style={{ textAlign: 'left' }}>Center / Cluster</th><th style={{ textAlign: 'left' }}>Description</th><th>Units</th><th>Unit cost</th><th>Total</th><th style={{ textAlign: 'left' }}>Notes</th></tr></thead>
+                <tbody>{request.allocationLines.map((line) => <tr key={line.id}><td>{line.centre_name || line.centre_location || line.cluster_name || 'Joint'}</td><td>{line.description}</td><td style={{ textAlign: 'right' }}>{line.units}</td><td style={{ textAlign: 'right' }}>{formatAmount(line.unit_cost)}</td><td style={{ textAlign: 'right' }}>{formatAmount(line.total)}</td><td>{line.notes || '—'}</td></tr>)}</tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        {request.distributions?.length > 0 && (
+          <div style={{ marginTop: '0.75rem' }}>
+            <strong>Payment distribution schedule:</strong>
+            <ul style={{ paddingLeft: '1.2rem', marginBottom: 0 }}>
+              {request.distributions.map((row) => <li key={row.id}>{row.supervisor_name} {row.centre_name ? `(${row.centre_name})` : ''} — {formatAmount(row.amount)}{row.notes ? ` — ${row.notes}` : ''}</li>)}
+            </ul>
+          </div>
+        )}
         {request.payment_type === 'other' && <p><strong>Specified payment type:</strong> {request.other_payment_type}</p>}
         {(request.invoice_file_url || request.quotation_file_url) && (
           <p>

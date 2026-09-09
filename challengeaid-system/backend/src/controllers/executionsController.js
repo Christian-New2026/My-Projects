@@ -32,6 +32,22 @@ async function executePayment(req, res, next) {
         );
       }
 
+      const { rows: pooledLines } = await client.query(
+        `SELECT COUNT(*)::int AS count FROM payment_request_lines
+         WHERE request_id = $1 AND line_type = 'cluster'`,
+        [id]
+      );
+      if (pooledLines[0].count > 0) {
+        const { rows: distributions } = await client.query(
+          `SELECT COUNT(*)::int AS count, COALESCE(SUM(amount), 0) AS total
+           FROM payment_request_distributions WHERE request_id = $1`,
+          [id]
+        );
+        if (distributions[0].count === 0) {
+          throw new AppError('Add the supervisor payment distribution schedule before executing a pooled cluster payment', 409);
+        }
+      }
+
       // Re-check budget at execution time too, not just at request
       // creation — other requests against the same line may have
       // been disbursed in the meantime.

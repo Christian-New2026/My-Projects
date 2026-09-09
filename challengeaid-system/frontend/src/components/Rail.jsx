@@ -30,7 +30,7 @@ export function Rail() {
     try {
       await api.changePassword(passwords.current, passwords.next);
       setPasswords({ current: '', next: '', confirm: '' });
-      setPasswordMessage({ type: 'success', text: 'Password changed successfully.' });
+      setPasswordMessage({ type: 'success', text: 'Approval request sent. Your password changes after approval.' });
     } catch (err) {
       setPasswordMessage({ type: 'error', text: err.message });
     } finally {

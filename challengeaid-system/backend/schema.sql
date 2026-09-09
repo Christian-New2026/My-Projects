@@ -88,6 +88,19 @@ CREATE TABLE users (
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE password_change_requests (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  new_password_hash   TEXT NOT NULL,
+  approval_token_hash TEXT NOT NULL UNIQUE,
+  status              TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  expires_at          TIMESTAMPTZ NOT NULL,
+  reviewed_at         TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_password_change_requests_user ON password_change_requests(user_id, status);
+
 -- CITEXT (case-insensitive email) requires the citext extension.
 CREATE EXTENSION IF NOT EXISTS citext;
 ALTER TABLE users ALTER COLUMN email TYPE CITEXT;
@@ -150,6 +163,7 @@ CREATE TABLE payment_request_centres (
 CREATE TABLE payment_request_lines (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_id   UUID NOT NULL REFERENCES payment_requests(id) ON DELETE CASCADE,
+  line_type    TEXT NOT NULL DEFAULT 'centre',
   centre_id    UUID REFERENCES centres(id),
   cluster_name TEXT,
   description  TEXT NOT NULL,
@@ -161,6 +175,18 @@ CREATE TABLE payment_request_lines (
 );
 
 CREATE INDEX idx_payment_request_lines_request ON payment_request_lines(request_id);
+
+CREATE TABLE payment_request_distributions (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_id     UUID NOT NULL REFERENCES payment_requests(id) ON DELETE CASCADE,
+  supervisor_name TEXT NOT NULL,
+  centre_id      UUID REFERENCES centres(id),
+  amount         NUMERIC(14,2) NOT NULL CHECK (amount > 0),
+  notes          TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_payment_request_distributions_request ON payment_request_distributions(request_id);
 
 -- One row per individual approval action (Finance, Director, and each
 -- of the four Trustees individually), per Section 9.1.
