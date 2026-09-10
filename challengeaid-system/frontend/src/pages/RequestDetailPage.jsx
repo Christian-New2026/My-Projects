@@ -24,6 +24,7 @@ export function RequestDetailPage() {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [comments, setComments] = useState('');
+  const [attachmentFileUrl, setAttachmentFileUrl] = useState('');
   const [revision, setRevision] = useState({
     activity: '',
     recipientName: '',
@@ -87,6 +88,13 @@ export function RequestDetailPage() {
     reader.readAsDataURL(file);
   }
 
+  function readAttachmentFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setAttachmentFileUrl(reader.result);
+    reader.readAsDataURL(file);
+  }
+
   async function handleResubmit(e) {
     e.preventDefault();
     if (!revision.recipientAccount && !revision.recipientPhone) {
@@ -135,14 +143,20 @@ export function RequestDetailPage() {
   async function handleUpload(e) {
     e.preventDefault();
     const form = new FormData(e.target);
+    const fileUrl = attachmentFileUrl || form.get('fileUrl')?.trim();
+    if (!fileUrl) {
+      setError('Choose a file from your computer or provide a file reference.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       await api.uploadDocument(id, {
         documentType: form.get('documentType'),
-        fileUrl: form.get('fileUrl')
+        fileUrl
       });
       e.target.reset();
+      setAttachmentFileUrl('');
       await load();
     } catch (err) {
       setError(err.message);
@@ -346,8 +360,17 @@ export function RequestDetailPage() {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="fileUrl">File reference (URL or path)</label>
-              <input id="fileUrl" name="fileUrl" placeholder="e.g. https://…/receipt.pdf" required />
+              <label htmlFor="fileUrl">File reference (optional if attaching a file)</label>
+              <input id="fileUrl" name="fileUrl" placeholder="e.g. https://…/receipt.pdf" />
+            </div>
+            <div className="field">
+              <label htmlFor="attachmentFile">Attach file from computer (optional)</label>
+              <input
+                id="attachmentFile"
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg"
+                onChange={(e) => readAttachmentFile(e.target.files[0])}
+              />
             </div>
             <button type="submit" disabled={busy}>Attach document</button>
           </form>
