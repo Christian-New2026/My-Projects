@@ -143,9 +143,9 @@ export function RequestDetailPage() {
   async function handleUpload(e) {
     e.preventDefault();
     const form = new FormData(e.target);
-    const fileUrl = attachmentFileUrl || form.get('fileUrl')?.trim();
+    const fileUrl = attachmentFileUrl;
     if (!fileUrl) {
-      setError('Choose a file from your computer or provide a file reference.');
+      setError('Choose a file from your computer before attaching the document.');
       return;
     }
     setBusy(true);
@@ -360,15 +360,16 @@ export function RequestDetailPage() {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="fileUrl">File reference (optional if attaching a file)</label>
-              <input id="fileUrl" name="fileUrl" placeholder="e.g. https://…/receipt.pdf" />
+              <label htmlFor="attachmentNotes">Notes/Comments (optional)</label>
+              <input id="attachmentNotes" name="attachmentNotes" placeholder="Add a note about this document" />
             </div>
             <div className="field">
-              <label htmlFor="attachmentFile">Attach file from computer (optional)</label>
+              <label htmlFor="attachmentFile">Attach document</label>
               <input
                 id="attachmentFile"
                 type="file"
                 accept=".pdf,.png,.jpg,.jpeg"
+                required
                 onChange={(e) => readAttachmentFile(e.target.files[0])}
               />
             </div>
