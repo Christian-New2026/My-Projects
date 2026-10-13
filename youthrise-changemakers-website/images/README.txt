@@ -1,0 +1,1 @@
+Add licensed YouthRise photos here. Suggested files: hero.jpg, students.jpg, centre.jpg, team.jpg. Do not use unlicensed images.
